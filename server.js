@@ -178,7 +178,18 @@ io.on('connection', (socket) => {
     });
 
     socket.on('submit-vote', (targetId) => {
-        if (gameState === 'vote' && players[socket.id].isAlive) {
+        const player = players[socket.id];
+        if (!player) return;
+
+        // 죽은 사람은 투표 금지
+        if (!player.isAlive) return;
+
+        // 투표는 한 사람당 한 번 (재투표 불가)
+        if (gameState === 'vote') {
+            if (votes[socket.id]) {
+                socket.emit('msg', '이미 투표하셨습니다. (변경 불가)');
+                return;
+            }
             votes[socket.id] = targetId;
             socket.emit('msg', '투표를 완료했습니다.');
         }
