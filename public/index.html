@@ -172,8 +172,8 @@
                 document.getElementById('skip-btn').classList.remove('hidden');
                 renderPlayers(true); // 투표 가능
             } else if (state === 'night') {
-                if (currentRole === '마피아' || currentRole === '의사') {
-                    renderPlayers(true); // 마피아 킬 or 의사 힐 가능
+                if (currentRole === '마피아' || currentRole === '의사' || currentRole === '경찰') {
+                    renderPlayers(true); // 마피아 킬, 의사 힐, 경찰 조사 가능
                 } else {
                     renderPlayers(false);
                 }
