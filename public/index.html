@@ -1,22 +1,73 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
     <meta charset="UTF-8">
     <title>웹 마피아 온라인</title>
     <style>
-        body { font-family: sans-serif; transition: background 0.5s; padding: 20px; }
-        body.night { background-color: #1a1a2e; color: white; }
-        body.vote { background-color: #2d3436; color: white; }
-        #chat-box { width: 100%; max-width: 500px; height: 300px; border: 1px solid #ccc; overflow-y: scroll; background: rgba(255, 255, 255, 0.1); margin-bottom: 10px; padding: 10px; }
-        .player-item { display: inline-block; padding: 10px; margin: 5px; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; }
-        .player-item:hover { background: #e1e1e1; color: gray; }
-        .hidden { display: none; }
-        .system-msg { color: #f1c40f; font-weight: bold; }
-        .player-item.dead { background-color: #555; color: #999; text-decoration: line-through; cursor: default; }
+        body {
+            font-family: sans-serif;
+            transition: background 0.5s;
+            padding: 20px;
+        }
+
+        /* 밤 상태일 때의 스타일 */
+        body.night {
+            background-color: #1a1a2e;
+            color: white;
+        }
+
+        body.vote {
+            background-color: #2d3436;
+            color: white;
+        }
+
+        #chat-box {
+            width: 100%;
+            max-width: 500px;
+            height: 300px;
+            border: 1px solid #ccc;
+            overflow-y: scroll;
+            background: rgba(255, 255, 255, 0.1);
+            margin-bottom: 10px;
+            padding: 10px;
+        }
+
+        .player-item {
+            display: inline-block;
+            padding: 10px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .player-item:hover {
+            background: #e1e1e1;
+            color: gray;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .system-msg {
+            color: #f1c40f;
+            font-weight: bold;
+        }
+
+        .player-item.dead {
+            background-color: #555;
+            color: #999;
+            text-decoration: line-through;
+            cursor: default;
+        }
     </style>
 </head>
+
 <body>
     <h1>🕵️ 웹 마피아 게임</h1>
+
     <div id="setup">
         <input id="nick" placeholder="닉네임 입력">
         <button onclick="join()">게임 입장</button>
@@ -26,14 +77,18 @@
         <h2 id="status-display">대기 중...</h2>
         <h3 id="timer-display"></h3>
         <h3 id="my-role">내 역할: 확인 중...</h3>
+
         <div id="chat-box"></div>
+
         <div id="input-area">
             <input id="msg" placeholder="메시지 입력" onkeypress="if(event.keyCode==13) send()">
             <button onclick="send()">전송</button>
         </div>
+
         <hr>
         <button id="start-btn" onclick="startGame()">게임 시작 (4인 이상)</button>
-        <h4>플레이어 목록</h4>
+
+        <h4>플레이어 목록 (투표 시 클릭)</h4>
         <div id="player-list"></div>
     </div>
 
@@ -43,19 +98,28 @@
         let myId = "";
         let currentPlayers = [];
         let currentRole = "시민";
-        let timerInterval = null;
 
+        // 타이머 간격 변수
+        let timerInterval = null;
+        let timeLeft = 0;
+
+        // 입장 함수
         function join() {
             const nick = document.getElementById('nick').value;
             if (!nick) return alert("닉네임을 입력하세요");
+
             socket.emit('join', nick);
             document.getElementById('setup').classList.add('hidden');
             document.getElementById('game').classList.remove('hidden');
             myId = socket.id;
         }
 
-        function startGame() { socket.emit('game-start'); }
+        // 게임 시작 버튼
+        function startGame() {
+            socket.emit('game-start');
+        }
 
+        // 메시지 전송
         function send() {
             const msgInput = document.getElementById('msg');
             if (!msgInput.value) return;
@@ -63,50 +127,83 @@
             msgInput.value = '';
         }
 
+        // 서버 이벤트: 플레이어 목록 업데이트
         socket.on('update-players', (players) => {
             currentPlayers = players;
             renderPlayers(false);
         });
 
+        // 서버 이벤트: 역할 부여
         socket.on('get-role', (role) => {
             currentRole = role;
             const roleEl = document.getElementById('my-role');
             roleEl.innerText = "내 역할: " + role;
-            if (role === '마피아') roleEl.style.color = "#e74c3c";
-            else if (role === '의사') roleEl.style.color = "#2ecc71";
-            else if (role === '경찰') roleEl.style.color = "#3498db";
-            else roleEl.style.color = "gray";
+            if (role === '마피아') {
+                roleEl.style.color = "#e74c3c"; // 빨강
+            } else if (role === '의사') {
+                roleEl.style.color = "#2ecc71"; // 초록
+            } else {
+                roleEl.style.color = "gray";
+            }
         });
 
+        // 서버 이벤트: 상태 변경 (밤/낮/투표)
         socket.on('state-change', (data) => {
             const { state, players, duration } = data;
-            currentPlayers = players;
+            currentPlayers = players; // 플레이어 상태 동기화
             document.body.className = state;
             document.getElementById('status-display').innerText = `현재 상태: ${state.toUpperCase()}`;
+
+            // 타이머 시작
             startTimer(duration);
 
-            if (state === 'vote') renderPlayers(true);
-            else if (state === 'night') {
-                renderPlayers(currentRole === '마피아' || currentRole === '의사' || currentRole === '경찰');
-            } else renderPlayers(false);
+            // 상태에 따른 상호작용 설정
+            if (state === 'vote') {
+                renderPlayers(true); // 투표 가능
+            } else if (state === 'night') {
+                if (currentRole === '마피아' || currentRole === '의사') {
+                    renderPlayers(true); // 마피아 킬 or 의사 힐 가능
+                } else {
+                    renderPlayers(false);
+                }
+            } else {
+                renderPlayers(false); // 클릭 불가
+            }
 
-            if (state !== 'ready') document.getElementById('start-btn').classList.add('hidden');
+            if (state !== 'ready') {
+                document.getElementById('start-btn').classList.add('hidden');
+            } else {
+                document.getElementById('start-btn').classList.remove('hidden');
+                document.getElementById('start-btn').innerText = "게임 재시작 (4인 이상)";
+            }
         });
 
+        // 타이머 함수
         function startTimer(duration) {
             if (timerInterval) clearInterval(timerInterval);
-            let timeLeft = duration;
+            if (duration <= 0) {
+                document.getElementById('timer-display').innerText = "";
+                return;
+            }
+
+            timeLeft = duration;
             const display = document.getElementById('timer-display');
+            display.innerText = `남은 시간: ${timeLeft}초`;
+
             timerInterval = setInterval(() => {
+                timeLeft--;
                 display.innerText = `남은 시간: ${timeLeft}초`;
-                if (--timeLeft < 0) clearInterval(timerInterval);
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                }
             }, 1000);
         }
 
+        // 서버 이벤트: 메시지 수신
         socket.on('msg', (msg) => {
             const box = document.getElementById('chat-box');
             const msgDiv = document.createElement('div');
-            if (msg.includes('📢') || msg.includes('🌙') || msg.includes('☀️') || msg.includes('🔍')) {
+            if (msg.includes('📢') || msg.includes('🌙') || msg.includes('☀️') || msg.includes('🔫') || msg.includes('🏥')) {
                 msgDiv.className = 'system-msg';
             }
             msgDiv.innerText = msg;
@@ -114,36 +211,76 @@
             box.scrollTop = box.scrollHeight;
         });
 
+        // 플레이어 리스트 그리기
         function renderPlayers(interactive) {
             const listDiv = document.getElementById('player-list');
             listDiv.innerHTML = '';
+
+            // 안내 문구
             const currentState = document.body.className;
+            const title = document.querySelector('h4');
+
+            if (currentState === 'night') {
+                if (currentRole === '마피아') title.innerText = '플레이어 목록 (처형 대상 클릭)';
+                else if (currentRole === '의사') title.innerText = '플레이어 목록 (치료 대상 클릭)';
+                else title.innerText = '플레이어 목록 (밤에는 활동 불가)';
+            } else if (currentState === 'vote') {
+                title.innerText = '플레이어 목록 (투표 시 클릭)';
+            } else {
+                title.innerText = '플레이어 목록';
+            }
 
             currentPlayers.forEach(player => {
                 const item = document.createElement('div');
-                item.className = 'player-item' + (player.isAlive ? '' : ' dead');
-                item.innerText = player.nickname + (player.isAlive ? '' : ' (사망)');
+                item.className = 'player-item';
 
+                if (!player.isAlive) {
+                    item.classList.add('dead');
+                    item.innerText = `${player.nickname} (사망)`;
+                } else {
+                    item.innerText = player.nickname;
+                }
+
+                // 상호작용 가능 여부
+                let isClickable = false;
                 if (interactive && player.isAlive) {
+                    if (currentState === 'vote') {
+                        if (player.id !== socket.id) isClickable = true;
+                    } else if (currentState === 'night') {
+                        if (currentRole === '마피아') {
+                            if (player.id !== socket.id) isClickable = true; // 마피아는 자살 불가
+                        } else if (currentRole === '의사') {
+                            isClickable = true; // 의사는 자힐 가능
+                        }
+                    }
+                }
+
+                if (isClickable) {
+                    item.style.cursor = "pointer";
                     item.onclick = () => {
-                        if (currentState === 'night') {
-                            if (currentRole === '경찰' && player.id !== socket.id) {
-                                if (confirm(player.nickname + "님을 조사하시겠습니까?")) {
-                                    socket.emit('police-investigate', player.id);
+                        if (currentState === 'vote') {
+                            socket.emit('submit-vote', player.id);
+                            alert(player.nickname + "님에게 투표했습니다.");
+                        } else if (currentState === 'night') {
+                            if (currentRole === '마피아') {
+                                if (confirm(player.nickname + "님을 처형하시겠습니까?")) {
+                                    socket.emit('mafia-kill', player.id);
                                 }
-                            } else if (currentRole === '마피아' && player.id !== socket.id) {
-                                socket.emit('mafia-kill', player.id);
-                                alert("처형 대상을 선택했습니다.");
                             } else if (currentRole === '의사') {
-                                socket.emit('doctor-heal', player.id);
-                                alert("치료 대상을 선택했습니다.");
+                                if (confirm(player.nickname + "님을 치료하시겠습니까?")) {
+                                    socket.emit('doctor-heal', player.id);
+                                }
                             }
                         }
                     };
+                } else {
+                    item.style.cursor = "default";
+                    item.onclick = null;
                 }
                 listDiv.appendChild(item);
             });
         }
     </script>
 </body>
+
 </html>
