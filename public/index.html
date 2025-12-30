@@ -89,6 +89,7 @@
         <hr>
         <button id="start-btn" onclick="startGame()">게임 시작 (4인 이상)</button>
 
+        <button id="skip-btn" class="hidden" onclick="skipVote()">투표 건너뛰기</button>
         <h4>플레이어 목록 (투표 시 클릭)</h4>
         <div id="player-list"></div>
     </div>
@@ -122,6 +123,10 @@
         }
 
         // 메시지 전송
+        function skipVote() {
+            socket.emit('submit-vote', 'skip');
+        }
+
         function send() {
             const msgInput = document.getElementById('msg');
             if (!msgInput.value) return;
@@ -142,6 +147,8 @@
             roleEl.innerText = "내 역할: " + role;
             if (role === '마피아') {
                 roleEl.style.color = "#e74c3c"; // 빨강
+            } else if (role === '경찰') {
+                roleEl.style.color = "#3498db"; // 파랑
             } else if (role === '의사') {
                 roleEl.style.color = "#2ecc71"; // 초록
             } else {
@@ -160,7 +167,9 @@
             startTimer(duration);
 
             // 상태에 따른 상호작용 설정
+            document.getElementById('skip-btn').classList.add('hidden');
             if (state === 'vote') {
+                document.getElementById('skip-btn').classList.remove('hidden');
                 renderPlayers(true); // 투표 가능
             } else if (state === 'night') {
                 if (currentRole === '마피아' || currentRole === '의사') {
@@ -224,6 +233,7 @@
 
             if (currentState === 'night') {
                 if (currentRole === '마피아') title.innerText = '플레이어 목록 (처형 대상 클릭)';
+                else if (currentRole === '경찰') title.innerText = '플레이어 목록 (조사 대상 클릭)';
                 else if (currentRole === '의사') title.innerText = '플레이어 목록 (치료 대상 클릭)';
                 else title.innerText = '플레이어 목록 (밤에는 활동 불가)';
             } else if (currentState === 'vote') {
@@ -251,6 +261,8 @@
                     } else if (currentState === 'night') {
                         if (currentRole === '마피아') {
                             if (player.id !== socket.id) isClickable = true; // 마피아는 자살 불가
+                        } else if (currentRole === '경찰') {
+                            if (player.id !== socket.id) isClickable = true;
                         } else if (currentRole === '의사') {
                             isClickable = true; // 의사는 자힐 가능
                         }
@@ -267,6 +279,10 @@
                             if (currentRole === '마피아') {
                                 if (confirm(player.nickname + "님을 처형하시겠습니까?")) {
                                     socket.emit('mafia-kill', player.id);
+                                }
+                            } else if (currentRole === '경찰') {
+                                if (confirm(player.nickname + "님을 조사하시겠습니까?")) {
+                                    socket.emit('police-investigate', player.id);
                                 }
                             } else if (currentRole === '의사') {
                                 if (confirm(player.nickname + "님을 치료하시겠습니까?")) {
